@@ -5,7 +5,7 @@
 // Yang diuji:
 //   1. Sambungan top level: setiap pasangan port diperiksa di setiap siklus.
 //   2. Reset: kondisi pin dan fetch pertama CPU.
-//   3. Firmware bawaan ROM: berjalan tanpa trap dan tanpa bus menggantung.
+//   3. Program ROM demo_led_berkedip: CPU menulis 0, 3, 6, 9, ... ke LED.
 //   4. Program uji: akses ROM, RAM, dan GPIO dari CPU, end to end.
 //
 // TM1638 belum dipasang, sehingga bus s3 tidak diuji.
@@ -155,6 +155,7 @@ module tb_soc_top;
     reg [31:0] first_read_addr = 32'hx;
     reg        ram_write_seen = 1'b0, gpio_write_seen = 1'b0;
     reg [31:0] first_ram_local = 32'hx, first_gpio_local = 32'hx;
+    reg [31:0] gpio_wdata [0:3];
 
     always @(posedge clk) begin
         if (rst_n) begin
@@ -169,6 +170,7 @@ module tb_soc_top;
                 end
             end
             if (uut.u2.s2_AWVALID && uut.u2.s2_AWREADY) begin
+                if (gpio_writes < 4) gpio_wdata[gpio_writes] = uut.u2.s2_WDATA;
                 gpio_writes = gpio_writes + 1;
                 if (!gpio_write_seen) begin
                     gpio_write_seen  = 1'b1;
@@ -209,7 +211,7 @@ module tb_soc_top;
     task load_test_program;
         begin
             uut.u3.mem[0]  = 32'h10000537; // lui  a0, 0x10000      ; basis RAM
-            uut.u3.mem[1]  = 32'h000235b7; // lui  a1, 0x23         ; basis GPIO
+            uut.u3.mem[1]  = 32'h000305b7; // lui  a1, 0x30         ; basis GPIO
             uut.u3.mem[2]  = 32'h10002283; // lw   t0, 0x100(zero)  ; baca data ROM
             uut.u3.mem[3]  = 32'h00552023; // sw   t0, 0(a0)        ; tulis word RAM
             uut.u3.mem[4]  = 32'h00052303; // lw   t1, 0(a0)        ; baca kembali RAM
@@ -240,21 +242,24 @@ module tb_soc_top;
         check("ARVALID = 0 saat reset",  uut.u1.mem_axi_arvalid, 1'b0);
         check("AWVALID = 0 saat reset",  uut.u1.mem_axi_awvalid, 1'b0);
 
-        section("Firmware bawaan ROM (100000 siklus)");
+        section("Program ROM demo_led_berkedip (5000 siklus)");
         iSW   = 16'hA5C3;
         rst_n = 1'b1;
-        repeat (100000) @(negedge clk);
-        check("Fetch pertama dari 0x00000000",     first_read_addr, 32'h0);
-        check("trap tetap 0",                      trap, 1'b0);
-        check("Bus tidak menggantung",             max_pending < 100, 1'b1);
-        check("ROM terbaca",                       rom_reads > 0, 1'b1);
-        check("RAM tertulis",                      ram_writes > 0, 1'b1);
-        check("RAM terbaca",                       ram_reads > 0, 1'b1);
-        check("GPIO tertulis",                     gpio_writes > 0, 1'b1);
-        check("Tulis RAM pertama: lokal 0x3FFC",   first_ram_local, 32'h0000_3FFC);
-        check("Tulis GPIO pertama: lokal 0x3004",  first_gpio_local, 32'h0000_3004);
-        $display("  [INFO] rom_reads=%0d ram_reads=%0d ram_writes=%0d gpio_reads=%0d gpio_writes=%0d max_pending=%0d",
-                 rom_reads, ram_reads, ram_writes, gpio_reads, gpio_writes, max_pending);
+        repeat (5000) @(negedge clk);
+        check("Fetch pertama dari 0x00000000",  first_read_addr, 32'h0);
+        check("trap tetap 0",                   trap, 1'b0);
+        check("Bus tidak menggantung",          max_pending < 100, 1'b1);
+        check("ROM terbaca",                    rom_reads > 0, 1'b1);
+        check("GPIO tertulis berulang",         gpio_writes > 100, 1'b1);
+        check("Tulis GPIO: lokal 0x0 (0x00030000)", first_gpio_local, 32'h0);
+        check("Nilai LED ke-1 = 0",             gpio_wdata[0], 32'd0);
+        check("Nilai LED ke-2 = 3",             gpio_wdata[1], 32'd3);
+        check("Nilai LED ke-3 = 6",             gpio_wdata[2], 32'd6);
+        check("Nilai LED ke-4 = 9",             gpio_wdata[3], 32'd9);
+        check("LED berubah dari 0",             oLED != 16'h0, 1'b1);
+        check("Program tidak memakai RAM",      ram_writes, 0);
+        $display("  [INFO] rom_reads=%0d gpio_writes=%0d oLED=%h max_pending=%0d",
+                 rom_reads, gpio_writes, oLED, max_pending);
 
         section("Program uji: CPU -> ROM, RAM, GPIO");
         apply_reset;

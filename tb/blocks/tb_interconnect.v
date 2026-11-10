@@ -54,8 +54,8 @@ module tb_interconnect;
 
     localparam [31:0] ROM_LOW  = 32'h0000_0000, ROM_HIGH  = 32'h0000_FFFF;
     localparam [31:0] RAM_LOW  = 32'h1000_0000, RAM_HIGH  = 32'h1000_FFFF;
-    localparam [31:0] GPIO_LOW = 32'h0002_0000, GPIO_HIGH = 32'h0002_FFFF;
-    localparam [31:0] TM_LOW   = 32'h0003_0000, TM_HIGH   = 32'h0003_FFFF;
+    localparam [31:0] GPIO_LOW = 32'h0003_0000, GPIO_HIGH = 32'h0003_FFFF;
+    localparam [31:0] TM_LOW   = 32'h0002_0000, TM_HIGH   = 32'h0002_FFFF;
 
     reg         clk, rst_n;
     reg         m_awvalid, m_wvalid, m_bready, m_arvalid, m_rready;
@@ -264,12 +264,12 @@ module tb_interconnect;
         check_only(0,0,0,0, 0,1,0,0);
 
         section("Baca s2 (GPIO)");
-        snapshot; axi_read(32'h0002_3004, data);
+        snapshot; axi_read(32'h0003_3004, data);
         check("Data dari s2, alamat lokal 0x3004", data, 32'hC000_3004);
         check_only(0,0,0,0, 0,0,1,0);
 
         section("Baca s3 (TM1638)");
-        snapshot; axi_read(32'h0003_0008, data);
+        snapshot; axi_read(32'h0002_0008, data);
         check("Data dari s3, alamat lokal 0x8", data, 32'hD000_0008);
         check("RRESP s3 diteruskan", resp, 2'b10);
         check_only(0,0,0,0, 0,0,0,1);
@@ -287,13 +287,13 @@ module tb_interconnect;
         check("s1 strobe",       m1.last_wstrb,  4'b0011);
         check_only(0,1,0,0, 0,0,0,0);
 
-        snapshot; axi_write(32'h0002_0000, 32'h3333_3333, 4'b1000);
+        snapshot; axi_write(32'h0003_0000, 32'h3333_3333, 4'b1000);
         check("s2 alamat lokal", m2.last_awaddr, 32'h0);
         check("s2 data",         m2.last_wdata,  32'h3333_3333);
         check("s2 strobe",       m2.last_wstrb,  4'b1000);
         check_only(0,0,1,0, 0,0,0,0);
 
-        snapshot; axi_write(32'h0003_FFFC, 32'h4444_4444, 4'b0100);
+        snapshot; axi_write(32'h0002_FFFC, 32'h4444_4444, 4'b0100);
         check("s3 alamat lokal", m3.last_awaddr, 32'hFFFC);
         check("s3 data",         m3.last_wdata,  32'h4444_4444);
         check("s3 strobe",       m3.last_wstrb,  4'b0100);

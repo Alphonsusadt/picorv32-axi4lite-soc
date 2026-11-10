@@ -1,4 +1,7 @@
-module axi_ram (
+module axi_ram #(
+    // Jumlah bit alamat word: 12 = 4096 word (16 KB), 11 = 2048 word (8 KB)
+    parameter ADDR_BITS = 12
+) (
     input         clk,
     input         rst_n,
     // AXI4-Lite Interface (Read/Write)
@@ -24,7 +27,7 @@ module axi_ram (
     // bukan flip-flop. Ini yang memperbaiki over-utilization di XC7A35T.
     // Isi RAM tidak di-reset (BRAM tak bisa di-clear via reset; lagipula
     // boot.S/ram_init.c sudah menol-kan .bss dan menyalin .data).
-    reg [31:0] mem [0:4095];
+    reg [31:0] mem [0:(1<<ADDR_BITS)-1];
 
     reg [1:0]  state;
     reg [31:0] rdata_r;      // registered read data -> kunci inferensi BRAM
@@ -36,13 +39,13 @@ module axi_ram (
             case (state)
                 0: begin  // Idle
                     if (axi_awvalid && axi_wvalid) begin            // Write request
-                        if (axi_wstrb[0]) mem[axi_awaddr[13:2]][7:0]   <= axi_wdata[7:0];
-                        if (axi_wstrb[1]) mem[axi_awaddr[13:2]][15:8]  <= axi_wdata[15:8];
-                        if (axi_wstrb[2]) mem[axi_awaddr[13:2]][23:16] <= axi_wdata[23:16];
-                        if (axi_wstrb[3]) mem[axi_awaddr[13:2]][31:24] <= axi_wdata[31:24];
+                        if (axi_wstrb[0]) mem[axi_awaddr[ADDR_BITS+1:2]][7:0]   <= axi_wdata[7:0];
+                        if (axi_wstrb[1]) mem[axi_awaddr[ADDR_BITS+1:2]][15:8]  <= axi_wdata[15:8];
+                        if (axi_wstrb[2]) mem[axi_awaddr[ADDR_BITS+1:2]][23:16] <= axi_wdata[23:16];
+                        if (axi_wstrb[3]) mem[axi_awaddr[ADDR_BITS+1:2]][31:24] <= axi_wdata[31:24];
                         state <= 2'd1;
                     end else if (axi_arvalid) begin                 // Read request
-                        rdata_r <= mem[axi_araddr[13:2]];           // baca sinkron (BRAM)
+                        rdata_r <= mem[axi_araddr[ADDR_BITS+1:2]];           // baca sinkron (BRAM)
                         state   <= 2'd2;
                     end
                 end

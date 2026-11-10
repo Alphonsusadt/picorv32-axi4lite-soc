@@ -4,6 +4,7 @@
 #   bash tb/run_all.sh          semua testbench
 #   bash tb/run_all.sh top      hanya SoC
 #   bash tb/run_all.sh blocks   hanya blok
+#   bash tb/run_all.sh board    hanya top level board iCESugar
 #
 # Hasil kompilasi, log, dan waveform disimpan di tb/build.
 
@@ -16,6 +17,8 @@ BUILD="$TB/build"
 MODE="${1:-all}"
 
 mkdir -p "$BUILD"
+# $readmemh di iverilog membaca file relatif terhadap folder kerja vvp
+cp "$RTL"/*_words.hex "$BUILD"/
 
 CPU=("$RTL"/picorv32/*.v)
 GPIO=("$RTL"/gpio/*.v)
@@ -50,6 +53,11 @@ if [ "$MODE" = "all" ] || [ "$MODE" = "top" ]; then
     run_tb tb_soc_top "$TB/tb_soc_top.v" \
         "$RTL/soc_demo.v" "$RTL/axi4_lite_interconnect_m1s4.v" "$RTL/axi_rom.v" "$RTL/axi_ram.v" \
         "${GPIO[@]}" "${CPU[@]}"
+fi
+
+if [ "$MODE" = "all" ] || [ "$MODE" = "board" ]; then
+    echo "== Board =="
+    run_tb tb_top_icesugar "$TB/tb_top_icesugar.v" "$ROOT/fpga/top_icesugar.v"         "$RTL/soc_demo.v" "$RTL/axi4_lite_interconnect_m1s4.v" "$RTL/axi_rom.v" "$RTL/axi_ram.v"         "${GPIO[@]}" "${CPU[@]}"
 fi
 
 if [ "$MODE" = "all" ] || [ "$MODE" = "blocks" ]; then

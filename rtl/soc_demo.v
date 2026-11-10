@@ -1,6 +1,11 @@
 `default_nettype wire
 
-module picorv32_soc (
+module picorv32_soc #(
+    // Ukuran memori dalam bit alamat word. Default 16 KB untuk simulasi;
+    // build iCESugar memakai nilai lebih kecil agar muat di BRAM UP5K.
+    parameter ROM_ADDR_BITS = 12,
+    parameter RAM_ADDR_BITS = 12
+) (
     input  wire           clk,
     input  wire           rst_n,
 	output wire           trap,
@@ -89,6 +94,18 @@ assign bus_rom_rresp   = 2'b00;
 assign bus_ram1_bresp  = 2'b00;
 assign bus_ram1_rresp  = 2'b00;
 
+// TM1638 belum dipasang, sehingga input s3 diikat ke nol agar tidak mengambang.
+// Akses CPU ke jendela s3 tetap menunggu tanpa respons sampai controller dipasang.
+// Hapus blok ini saat TM1638 Controller diinstansiasi.
+assign bus_tm_awready = 1'b0;
+assign bus_tm_wready  = 1'b0;
+assign bus_tm_bvalid  = 1'b0;
+assign bus_tm_bresp   = 2'b00;
+assign bus_tm_arready = 1'b0;
+assign bus_tm_rvalid  = 1'b0;
+assign bus_tm_rresp   = 2'b00;
+assign bus_tm_rdata   = 32'h0000_0000;
+
 picorv32_axi u1 (
 	.clk(clk),
     .resetn(rst_n),
@@ -126,9 +143,15 @@ picorv32_axi u1 (
 	.trace_data()
 );
 axi4_lite_interconnect_m1s4 #(
-    // Firmware memakai RAM pada alamat 0x1000_0000
+    // Firmware lama memakai RAM pada alamat 0x1000_0000
     .LOW_ADDR1(32'h1000_0000),
-    .HIGH_ADDR1(32'h1000_FFFF)
+    .HIGH_ADDR1(32'h1000_FFFF),
+    // Program demo_led_berkedip menulis LED ke 0x0003_0000, sehingga
+    // jendela GPIO (s2) dan TM1638 (s3) ditukar dari nilai default.
+    .LOW_ADDR2(32'h0003_0000),
+    .HIGH_ADDR2(32'h0003_FFFF),
+    .LOW_ADDR3(32'h0002_0000),
+    .HIGH_ADDR3(32'h0002_FFFF)
 ) u2(
     .iCLK(clk),
     .iRST(rst_n),
@@ -273,7 +296,7 @@ axi4_lite_interconnect_m1s4 #(
         .s3_RDATA(bus_tm_rdata),
         .s3_RREADY(bus_tm_rready)
 );
-axi_rom u3(
+axi_rom #(.ADDR_BITS(ROM_ADDR_BITS)) u3(
     .clk(clk),
     .rst_n(rst_n),
 
@@ -291,7 +314,7 @@ axi_rom u3(
     .ld_addr(32'b0),
     .ld_data(32'b0)
 );
-axi_ram u4(
+axi_ram #(.ADDR_BITS(RAM_ADDR_BITS)) u4(
 	.clk(clk),
     .rst_n(rst_n),
     // AXI4-Lite Interface (Read/Write)

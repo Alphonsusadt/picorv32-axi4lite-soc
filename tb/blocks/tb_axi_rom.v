@@ -56,10 +56,10 @@ module tb_axi_rom;
         check("ARREADY = 1", axi_arready, 1'b1);
         check("RVALID = 0",  axi_rvalid,  1'b0);
 
-        section("Baca firmware");
-        read_word(32'h0000_0000, data); check("Alamat 0x0 = mem[0]", data, 32'h0000_0093);
-        read_word(32'h0000_0004, data); check("Alamat 0x4 = mem[1]", data, 32'h0000_0113);
-        read_word(32'h0000_0008, data); check("Alamat 0x8 = mem[2]", data, 32'h0000_0193);
+        section("Baca program demo_led_berkedip");
+        read_word(32'h0000_0000, data); check("Alamat 0x0 = mem[0]", data, 32'h0003_02B7);
+        read_word(32'h0000_0004, data); check("Alamat 0x4 = mem[1]", data, 32'h0000_0313);
+        read_word(32'h0000_0008, data); check("Alamat 0x8 = mem[2]", data, 32'h0010_0213);
         read_word(32'h0000_0FC0, data); check("Alamat 0xFC0 = mem[1008]", data, uut.mem[1008]);
 
         section("Handshake baca");
@@ -71,7 +71,7 @@ module tb_axi_rom;
         check("ARREADY = 0 saat data menunggu", axi_arready, 1'b0);
         repeat (3) @(negedge clk);
         check("RVALID bertahan tanpa RREADY",   axi_rvalid,  1'b1);
-        check("RDATA stabil tanpa RREADY",      axi_rdata,   32'h0000_0113);
+        check("RDATA stabil tanpa RREADY",      axi_rdata,   32'h0000_0313);
         axi_rready = 1'b1;
         @(negedge clk);
         axi_rready = 1'b0;
@@ -88,7 +88,7 @@ module tb_axi_rom;
 
         section("Pengulangan alamat");
         read_word(32'h0000_4000, data);
-        check("Alamat 0x4000 mengulang mem[0]", data, 32'h0000_0093);
+        check("Alamat 0x4000 mengulang mem[0]", data, 32'h0003_02B7);
 
         section("Reset membatalkan data tertunda");
         @(negedge clk);
