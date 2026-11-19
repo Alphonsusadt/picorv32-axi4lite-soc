@@ -2,9 +2,12 @@
 #
 # Jalankan dari root proyek:
 #   yosys -p "tcl tcl/build.tcl icesugar"
-#   yosys -p "tcl tcl/build.tcl tangnano20k"
+#   yosys -p "tcl tcl/build.tcl tangnano20k tm1638_demo"
 #
-# Biasanya dipanggil lewat: make all  atau  make all BOARD=tangnano20k
+# Argumen kedua memilih program ROM: rtl/<program>_words.hex.
+# Default demo_led_berkedip_xcelium_v2 (program dosen).
+#
+# Biasanya dipanggil lewat: make all BOARD=... PROGRAM=...
 
 yosys -import
 
@@ -23,7 +26,15 @@ if {[info exists ::argc] && $::argc > 0} {
     set board icesugar
 }
 
-set build_dir "build/$board"
+if {[info exists ::argc] && $::argc > 1} {
+    set program [lindex $::argv 1]
+} elseif {[info exists ::env(PROGRAM)] && $::env(PROGRAM) ne ""} {
+    set program $::env(PROGRAM)
+} else {
+    set program demo_led_berkedip_xcelium_v2
+}
+
+set build_dir "build/$board/$program"
 file mkdir $build_dir
 
 switch -- $board {
@@ -53,6 +64,13 @@ set src_files [list \
     "rtl/gpio/axi4_lite_gpio_wrapper.v" \
     "rtl/gpio/axi4_lite_slave.v" \
     "rtl/gpio/gpio.v" \
+    "rtl/spi/axi4_lite_spi.v" \
+    "rtl/spi/spi_core.v" \
+    "rtl/uart/uart_rx.v" \
+    "rtl/uart/uart_tx.v" \
+    "rtl/uart/rom_loader.v" \
+    "rtl/uart/axi4_lite_uart.v" \
+    "rtl/uart/axi4_lite_split2.v" \
     "rtl/picorv32/picorv32.v" \
     "rtl/picorv32/picorv32_axi.v" \
     "rtl/picorv32/picorv32_axi_adapter.v" \
@@ -72,8 +90,15 @@ proc run {args} {
 # ------------------------------------------------------------------
 # 1. Isi ROM dari file .hex
 # ------------------------------------------------------------------
-puts "\n==== 1. ROM ===="
-hex_bytes_to_words rtl/demo_led_berkedip_xcelium_v2.hex rtl/demo_led_berkedip_xcelium_v2_words.hex
+puts "\n==== 1. ROM ($program) ===="
+set rom_words "rtl/${program}_words.hex"
+if {$program eq "demo_led_berkedip_xcelium_v2"} {
+    hex_bytes_to_words rtl/demo_led_berkedip_xcelium_v2.hex $rom_words
+} elseif {![file exists $rom_words]} {
+    error "$rom_words tidak ada. Jalankan dulu: make firmware"
+} else {
+    puts "ROM: memakai $rom_words (dibuat oleh firmware/Makefile)"
+}
 
 # ------------------------------------------------------------------
 # 2. Sintesis
@@ -85,6 +110,8 @@ foreach file $src_files {
 }
 # Primitif vendor (misalnya rPLL) dibaca sebagai library
 read_verilog -lib $cells_lib
+# File ROM diteruskan top -> picorv32_soc -> axi_rom
+chparam -set ROM_INIT "\"[file tail $rom_words]\"" $top_level
 hierarchy -check -top $top_level
 $synth_cmd -top $top_level -json $json
 tee -o "${build_dir}/stat.txt" stat

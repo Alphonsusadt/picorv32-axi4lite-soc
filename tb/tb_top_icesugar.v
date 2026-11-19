@@ -17,11 +17,17 @@ module tb_top_icesugar;
     reg        clk;
     reg  [3:0] SW;
     wire       LED_R, LED_G, LED_B;
+    wire       tm_dio;
 
     top_icesugar #(.CLK_DIV_LOG2(0)) uut (
         .clk(clk), .SW(SW),
-        .LED_R(LED_R), .LED_G(LED_G), .LED_B(LED_B)
+        .LED_R(LED_R), .LED_G(LED_G), .LED_B(LED_B),
+        .tm_stb(), .tm_clk(), .tm_dio(tm_dio),
+        .uart_rx(1'b1), .uart_tx()
     );
+
+    // TM1638 tidak dipasang; DIO hanya ditarik ke atas seperti pull-up SB_IO
+    pullup (tm_dio);
 
     // 12 MHz
     initial clk = 1'b0;

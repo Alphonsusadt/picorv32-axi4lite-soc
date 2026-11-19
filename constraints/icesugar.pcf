@@ -18,8 +18,17 @@ set_io LED_G 41
 set_io LED_B 39
 
 # ------------------------------------------
-# Cadangan untuk TM1638 di PMOD 1 (belum dipakai)
+# UART iCELink (USB), dipakai loader dan bootloader
 # ------------------------------------------
-# set_io tm_cs  9
-# set_io tm_clk 4
-# set_io tm_dio 2
+set_io uart_rx 4
+set_io uart_tx 6
+
+# ------------------------------------------
+# TM1638 di PMOD 2 lewat SPI universal.
+# Posisi pin sama dengan PMOD 1 saat UTS (pin 10, 11, 12 PMOD),
+# karena pin 4 (PMOD 1 pin 11) dipakai UART RX iCELink.
+#   STB -> P2_12 = 45, CLK -> P2_11 = 43, DIO -> P2_10 = 38
+# ------------------------------------------
+set_io tm_stb 45
+set_io tm_clk 43
+set_io tm_dio 38

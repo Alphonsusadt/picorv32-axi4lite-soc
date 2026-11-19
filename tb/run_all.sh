@@ -18,10 +18,12 @@ MODE="${1:-all}"
 
 mkdir -p "$BUILD"
 # $readmemh di iverilog membaca file relatif terhadap folder kerja vvp
-cp "$RTL"/*_words.hex "$BUILD"/
+cp "$RTL"/*_words.hex "$RTL"/led_pattern.hex "$ROOT"/firmware/bin/*.hex "$BUILD"/
 
 CPU=("$RTL"/picorv32/*.v)
 GPIO=("$RTL"/gpio/*.v)
+SPI=("$RTL"/spi/*.v "$RTL"/uart/*.v)
+TM="$TB/models/tm1638_model.v"
 failed=0
 total=0
 
@@ -52,12 +54,23 @@ if [ "$MODE" = "all" ] || [ "$MODE" = "top" ]; then
     echo "== SoC =="
     run_tb tb_soc_top "$TB/tb_soc_top.v" \
         "$RTL/soc_demo.v" "$RTL/axi4_lite_interconnect_m1s4.v" "$RTL/axi_rom.v" "$RTL/axi_ram.v" \
-        "${GPIO[@]}" "${CPU[@]}"
+        "${GPIO[@]}" "${SPI[@]}" "${CPU[@]}"
+    run_tb tb_soc_tm1638 "$TB/tb_soc_tm1638.v" "$TM" \
+        "$RTL/soc_demo.v" "$RTL/axi4_lite_interconnect_m1s4.v" "$RTL/axi_rom.v" "$RTL/axi_ram.v" \
+        "${GPIO[@]}" "${SPI[@]}" "${CPU[@]}"
+    run_tb tb_soc_nim "$TB/tb_soc_nim.v" "$TM" \
+        "$RTL/soc_demo.v" "$RTL/axi4_lite_interconnect_m1s4.v" "$RTL/axi_rom.v" "$RTL/axi_ram.v" \
+        "${GPIO[@]}" "${SPI[@]}" "${CPU[@]}"
+    run_tb tb_soc_loader "$TB/tb_soc_loader.v" \
+        "$RTL/soc_demo.v" "$RTL/axi4_lite_interconnect_m1s4.v" "$RTL/axi_rom.v" "$RTL/axi_ram.v" \
+        "${GPIO[@]}" "${SPI[@]}" "${CPU[@]}"
 fi
 
 if [ "$MODE" = "all" ] || [ "$MODE" = "board" ]; then
     echo "== Board =="
-    run_tb tb_top_icesugar "$TB/tb_top_icesugar.v" "$ROOT/fpga/top_icesugar.v"         "$RTL/soc_demo.v" "$RTL/axi4_lite_interconnect_m1s4.v" "$RTL/axi_rom.v" "$RTL/axi_ram.v"         "${GPIO[@]}" "${CPU[@]}"
+    run_tb tb_top_icesugar "$TB/tb_top_icesugar.v" "$ROOT/fpga/top_icesugar.v" \
+        "$RTL/soc_demo.v" "$RTL/axi4_lite_interconnect_m1s4.v" "$RTL/axi_rom.v" "$RTL/axi_ram.v" \
+        "${GPIO[@]}" "${SPI[@]}" "${CPU[@]}"
 fi
 
 if [ "$MODE" = "all" ] || [ "$MODE" = "blocks" ]; then
@@ -68,6 +81,10 @@ if [ "$MODE" = "all" ] || [ "$MODE" = "blocks" ]; then
     run_tb tb_axi_ram      "$TB/blocks/tb_axi_ram.v"      "$RTL/axi_ram.v"
     run_tb tb_gpio         "$TB/blocks/tb_gpio.v"         "$RTL/gpio/gpio.v"
     run_tb tb_gpio_wrapper "$TB/blocks/tb_gpio_wrapper.v" "${GPIO[@]}"
+    run_tb tb_spi_core     "$TB/blocks/tb_spi_core.v"     "$RTL/spi/spi_core.v"
+    run_tb tb_uart         "$TB/blocks/tb_uart.v"         "$RTL/uart/uart_rx.v" "$RTL/uart/uart_tx.v"
+    run_tb tb_rom_loader   "$TB/blocks/tb_rom_loader.v"   "$RTL/uart/uart_rx.v" "$RTL/uart/rom_loader.v"
+    run_tb tb_axi4_lite_spi "$TB/blocks/tb_axi4_lite_spi.v" "$TM" "${SPI[@]}" "$RTL/gpio/axi4_lite_slave.v"
 fi
 
 echo

@@ -26,3 +26,18 @@ IO_LOC  "LED[4]" 19;
 IO_PORT "LED[4]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
 IO_LOC  "LED[5]" 20;
 IO_PORT "LED[5]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+
+// TM1638 lewat SPI universal, di header pin 25-27.
+// Periksa dengan skematik Tang Nano 20K sebelum menyambung kabel.
+IO_LOC  "tm_clk" 25;
+IO_PORT "tm_clk" IO_TYPE=LVCMOS33 DRIVE=8;
+IO_LOC  "tm_stb" 26;
+IO_PORT "tm_stb" IO_TYPE=LVCMOS33 DRIVE=8;
+IO_LOC  "tm_dio" 27;
+IO_PORT "tm_dio" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+
+// UART lewat chip USB BL616 on-board, dipakai loader dan bootloader
+IO_LOC  "uart_rx" 70;
+IO_PORT "uart_rx" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+IO_LOC  "uart_tx" 69;
+IO_PORT "uart_tx" IO_TYPE=LVCMOS33 DRIVE=8;

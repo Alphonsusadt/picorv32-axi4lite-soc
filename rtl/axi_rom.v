@@ -1,6 +1,8 @@
 module axi_rom #(
     // Jumlah bit alamat word: 12 = 4096 word (16 KB), 10 = 1024 word (4 KB)
-    parameter ADDR_BITS = 12
+    parameter ADDR_BITS = 12,
+    // File isi ROM, 1 word per baris
+    parameter INIT_FILE = "demo_led_berkedip_xcelium_v2_words.hex"
 ) (
     input         clk,
     input         rst_n,
@@ -39,7 +41,7 @@ module axi_rom #(
     // mem selebar 32 bit. Karena itu dipakai versi 1 word per baris yang
     // dibuat dari file tersebut oleh tcl/hex_bytes_to_words.tcl.
 initial begin
-    $readmemh("demo_led_berkedip_xcelium_v2_words.hex", mem);
+    $readmemh(INIT_FILE, mem);
 end
 
     // ===============================

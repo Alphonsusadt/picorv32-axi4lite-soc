@@ -4,15 +4,38 @@ module picorv32_soc #(
     // Ukuran memori dalam bit alamat word. Default 16 KB untuk simulasi;
     // build iCESugar memakai nilai lebih kecil agar muat di BRAM UP5K.
     parameter ROM_ADDR_BITS = 12,
-    parameter RAM_ADDR_BITS = 12
+    parameter RAM_ADDR_BITS = 12,
+    // File isi ROM (1 word per baris). Default program LED dari dosen.
+    parameter ROM_INIT = "demo_led_berkedip_xcelium_v2_words.hex",
+    // Pembagi baud UART (loader dan periferal UART): f_clk / baud
+    parameter UART_DIV = 78
 ) (
     input  wire           clk,
     input  wire           rst_n,
 	output wire           trap,
 	input  wire [15:0]    iSW,
-	output wire [15:0]    oLED
-    // tambahkan pin yang sesuai
+	output wire [15:0]    oLED,
+    // SPI universal (s3). Buffer tri-state DIO ada di top level board.
+    output wire           spi_sck,
+    output wire [1:0]     spi_cs_n,
+    output wire           spi_sdo,
+    output wire           spi_sdo_oe,
+    input  wire           spi_sdi,
+    // UART: loader ROM (skenario A) dan periferal UART (skenario B)
+    input  wire           uart_rx,
+    output wire           uart_tx,
+    output wire           loader_busy,     // loader sedang menerima frame
+    output wire           loader_error     // checksum salah / frame terputus
 );
+
+localparam [15:0] UART_DIV16 = UART_DIV;
+
+// Loader menahan CPU dan seluruh bus dalam reset selama menulis ROM
+wire loader_hold;
+wire sys_rst_n = rst_n & ~loader_hold;
+wire        ld_we;
+wire [31:0] ld_addr, ld_data;
+
 // bus_picorv32: CPU <-> interconnect (m0)
 wire        bus_picorv32_awvalid, bus_picorv32_awready;
 wire [31:0] bus_picorv32_awaddr;
@@ -69,7 +92,7 @@ wire        bus_gpio_rvalid, bus_gpio_rready;
 wire [ 1:0] bus_gpio_rresp;
 wire [31:0] bus_gpio_rdata;
 
-// bus_tm: interconnect (s3) <-> TM1638 Controller
+// bus_tm: interconnect (s3) <-> pemisah s3 (SPI dan UART)
 wire        bus_tm_awvalid, bus_tm_awready;
 wire [31:0] bus_tm_awaddr;
 wire        bus_tm_wvalid, bus_tm_wready;
@@ -83,6 +106,34 @@ wire        bus_tm_rvalid, bus_tm_rready;
 wire [ 1:0] bus_tm_rresp;
 wire [31:0] bus_tm_rdata;
 
+// bus_spi: pemisah s3 <-> SPI universal (0x0002_0000)
+wire        bus_spi_awvalid, bus_spi_awready;
+wire [31:0] bus_spi_awaddr;
+wire        bus_spi_wvalid, bus_spi_wready;
+wire [31:0] bus_spi_wdata;
+wire [ 3:0] bus_spi_wstrb;
+wire        bus_spi_bvalid, bus_spi_bready;
+wire [ 1:0] bus_spi_bresp;
+wire        bus_spi_arvalid, bus_spi_arready;
+wire [31:0] bus_spi_araddr;
+wire        bus_spi_rvalid, bus_spi_rready;
+wire [ 1:0] bus_spi_rresp;
+wire [31:0] bus_spi_rdata;
+
+// bus_uart: pemisah s3 <-> UART (0x0002_1000)
+wire        bus_uart_awvalid, bus_uart_awready;
+wire [31:0] bus_uart_awaddr;
+wire        bus_uart_wvalid, bus_uart_wready;
+wire [31:0] bus_uart_wdata;
+wire [ 3:0] bus_uart_wstrb;
+wire        bus_uart_bvalid, bus_uart_bready;
+wire [ 1:0] bus_uart_bresp;
+wire        bus_uart_arvalid, bus_uart_arready;
+wire [31:0] bus_uart_araddr;
+wire        bus_uart_rvalid, bus_uart_rready;
+wire [ 1:0] bus_uart_rresp;
+wire [31:0] bus_uart_rdata;
+
 // ROM tidak punya kanal tulis dan port respons, sehingga nilainya ditetapkan di sini
 assign bus_rom_awready = 1'b0;
 assign bus_rom_wready  = 1'b0;
@@ -94,21 +145,9 @@ assign bus_rom_rresp   = 2'b00;
 assign bus_ram1_bresp  = 2'b00;
 assign bus_ram1_rresp  = 2'b00;
 
-// TM1638 belum dipasang, sehingga input s3 diikat ke nol agar tidak mengambang.
-// Akses CPU ke jendela s3 tetap menunggu tanpa respons sampai controller dipasang.
-// Hapus blok ini saat TM1638 Controller diinstansiasi.
-assign bus_tm_awready = 1'b0;
-assign bus_tm_wready  = 1'b0;
-assign bus_tm_bvalid  = 1'b0;
-assign bus_tm_bresp   = 2'b00;
-assign bus_tm_arready = 1'b0;
-assign bus_tm_rvalid  = 1'b0;
-assign bus_tm_rresp   = 2'b00;
-assign bus_tm_rdata   = 32'h0000_0000;
-
 picorv32_axi u1 (
 	.clk(clk),
-    .resetn(rst_n),
+    .resetn(sys_rst_n),
 	.trap(trap),
 
 	// AXI4-lite master memory interface
@@ -154,7 +193,7 @@ axi4_lite_interconnect_m1s4 #(
     .HIGH_ADDR3(32'h0002_FFFF)
 ) u2(
     .iCLK(clk),
-    .iRST(rst_n),
+    .iRST(sys_rst_n),
 
     /* master interface 0 */
         /* write address channel */    
@@ -296,9 +335,9 @@ axi4_lite_interconnect_m1s4 #(
         .s3_RDATA(bus_tm_rdata),
         .s3_RREADY(bus_tm_rready)
 );
-axi_rom #(.ADDR_BITS(ROM_ADDR_BITS)) u3(
+axi_rom #(.ADDR_BITS(ROM_ADDR_BITS), .INIT_FILE(ROM_INIT)) u3(
     .clk(clk),
-    .rst_n(rst_n),
+    .rst_n(sys_rst_n),
 
     // AXI4-Lite Interface (Read-Only) -- Port A (CPU fetch/read)
     .axi_arvalid(bus_rom_arvalid),
@@ -310,13 +349,13 @@ axi_rom #(.ADDR_BITS(ROM_ADDR_BITS)) u3(
 
     // Loader Interface -- Port B (SPI boot-loader writes new firmware here).
     // ld_addr is a WORD index. Used only while the CPU is held in reset.
-    .ld_we(1'b0),
-    .ld_addr(32'b0),
-    .ld_data(32'b0)
+    .ld_we(ld_we),
+    .ld_addr(ld_addr),
+    .ld_data(ld_data)
 );
 axi_ram #(.ADDR_BITS(RAM_ADDR_BITS)) u4(
 	.clk(clk),
-    .rst_n(rst_n),
+    .rst_n(sys_rst_n),
     // AXI4-Lite Interface (Read/Write)
     .axi_awvalid(bus_ram1_awvalid),
     .axi_awready(bus_ram1_awready),
@@ -336,7 +375,7 @@ axi_ram #(.ADDR_BITS(RAM_ADDR_BITS)) u4(
 );
 axi4_lite_gpio_wrapper u5(
     .iCLK(clk),
-    .iRST(rst_n),
+    .iRST(sys_rst_n),
 
     .iSW(iSW),
     .oLED(oLED),
@@ -370,6 +409,133 @@ axi4_lite_gpio_wrapper u5(
     .s_RRESP(bus_gpio_rresp),
     .s_RDATA(bus_gpio_rdata)
 );
-// lanjutkan disini
+// SPI universal di slot s3 (0x0002_0000). Untuk TM1638 dipakai mode 3,
+// LSB dulu, 3-wire; urutan perintah TM1638 ada di firmware.
+axi4_lite_spi u6(
+    .iCLK(clk),
+    .iRST(sys_rst_n),
+
+    /* write address channel */
+    .s_AWVALID(bus_spi_awvalid),
+    .s_AWPROT(3'b000),
+    .s_AWADDR(bus_spi_awaddr),
+    .s_AWREADY(bus_spi_awready),
+
+    /* write data channel */
+    .s_WVALID(bus_spi_wvalid),
+    .s_WDATA(bus_spi_wdata),
+    .s_WSTRB(bus_spi_wstrb),
+    .s_WREADY(bus_spi_wready),
+
+    /* write response channel */
+    .s_BREADY(bus_spi_bready),
+    .s_BVALID(bus_spi_bvalid),
+    .s_BRESP(bus_spi_bresp),
+
+    /* read address channel */
+    .s_ARVALID(bus_spi_arvalid),
+    .s_ARPROT(3'b000),
+    .s_ARADDR(bus_spi_araddr),
+    .s_ARREADY(bus_spi_arready),
+
+    /* read data channel */
+    .s_RREADY(bus_spi_rready),
+    .s_RVALID(bus_spi_rvalid),
+    .s_RRESP(bus_spi_rresp),
+    .s_RDATA(bus_spi_rdata),
+
+    /* pin SPI */
+    .oSCK(spi_sck),
+    .oCS_N(spi_cs_n),
+    .oSDO(spi_sdo),
+    .oSDO_OE(spi_sdo_oe),
+    .iSDI(spi_sdi)
+);
+
+// Slot s3 dibagi dua dengan bit alamat 12:
+//   0x0002_0000 - 0x0002_0FFF SPI universal (u6)
+//   0x0002_1000 - 0x0002_1FFF UART (u9)
+axi4_lite_split2 #(.SEL_BIT(12)) u8(
+    .s_AWVALID(bus_tm_awvalid),
+    .s_AWADDR(bus_tm_awaddr),
+    .s_AWREADY(bus_tm_awready),
+    .s_WVALID(bus_tm_wvalid),
+    .s_WDATA(bus_tm_wdata),
+    .s_WSTRB(bus_tm_wstrb),
+    .s_WREADY(bus_tm_wready),
+    .s_BREADY(bus_tm_bready),
+    .s_BVALID(bus_tm_bvalid),
+    .s_BRESP(bus_tm_bresp),
+    .s_ARVALID(bus_tm_arvalid),
+    .s_ARADDR(bus_tm_araddr),
+    .s_ARREADY(bus_tm_arready),
+    .s_RREADY(bus_tm_rready),
+    .s_RVALID(bus_tm_rvalid),
+    .s_RRESP(bus_tm_rresp),
+    .s_RDATA(bus_tm_rdata),
+
+    .a_AWVALID(bus_spi_awvalid),
+    .a_AWADDR(bus_spi_awaddr),
+    .a_AWREADY(bus_spi_awready),
+    .a_WVALID(bus_spi_wvalid),
+    .a_WDATA(bus_spi_wdata),
+    .a_WSTRB(bus_spi_wstrb),
+    .a_WREADY(bus_spi_wready),
+    .a_BREADY(bus_spi_bready),
+    .a_BVALID(bus_spi_bvalid),
+    .a_BRESP(bus_spi_bresp),
+    .a_ARVALID(bus_spi_arvalid),
+    .a_ARADDR(bus_spi_araddr),
+    .a_ARREADY(bus_spi_arready),
+    .a_RREADY(bus_spi_rready),
+    .a_RVALID(bus_spi_rvalid),
+    .a_RRESP(bus_spi_rresp),
+    .a_RDATA(bus_spi_rdata),
+
+    .b_AWVALID(bus_uart_awvalid),
+    .b_AWADDR(bus_uart_awaddr),
+    .b_AWREADY(bus_uart_awready),
+    .b_WVALID(bus_uart_wvalid),
+    .b_WDATA(bus_uart_wdata),
+    .b_WSTRB(bus_uart_wstrb),
+    .b_WREADY(bus_uart_wready),
+    .b_BREADY(bus_uart_bready),
+    .b_BVALID(bus_uart_bvalid),
+    .b_BRESP(bus_uart_bresp),
+    .b_ARVALID(bus_uart_arvalid),
+    .b_ARADDR(bus_uart_araddr),
+    .b_ARREADY(bus_uart_arready),
+    .b_RREADY(bus_uart_rready),
+    .b_RVALID(bus_uart_rvalid),
+    .b_RRESP(bus_uart_rresp),
+    .b_RDATA(bus_uart_rdata)
+);
+
+axi4_lite_uart #(.DEFAULT_DIV(UART_DIV)) u9(
+    .iCLK(clk),
+    .iRST(sys_rst_n),
+    .s_AWVALID(bus_uart_awvalid), .s_AWPROT(3'b000), .s_AWADDR(bus_uart_awaddr), .s_AWREADY(bus_uart_awready),
+    .s_WVALID(bus_uart_wvalid), .s_WDATA(bus_uart_wdata), .s_WSTRB(bus_uart_wstrb), .s_WREADY(bus_uart_wready),
+    .s_BREADY(bus_uart_bready), .s_BVALID(bus_uart_bvalid), .s_BRESP(bus_uart_bresp),
+    .s_ARVALID(bus_uart_arvalid), .s_ARPROT(3'b000), .s_ARADDR(bus_uart_araddr), .s_ARREADY(bus_uart_arready),
+    .s_RREADY(bus_uart_rready), .s_RVALID(bus_uart_rvalid), .s_RRESP(bus_uart_rresp), .s_RDATA(bus_uart_rdata),
+    .iRX(uart_rx),
+    .oTX(uart_tx)
+);
+
+// Skenario A: loader hardware ke port B ROM. Memakai rst_n asli agar tetap
+// berjalan saat CPU ditahan.
+rom_loader #(.ROM_WORDS(1 << ROM_ADDR_BITS)) u7(
+    .clk(clk),
+    .rst_n(rst_n),
+    .clks_per_bit(UART_DIV16),
+    .rx(uart_rx),
+    .hold(loader_hold),
+    .error(loader_error),
+    .busy(loader_busy),
+    .ld_we(ld_we),
+    .ld_addr(ld_addr),
+    .ld_data(ld_data)
+);
 
 endmodule
