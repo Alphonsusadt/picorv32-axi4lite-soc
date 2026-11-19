@@ -1,0 +1,33 @@
+{
+    "DESIGN_NAME": "soc_nim_asic",
+    "VERILOG_FILES": [
+        "dir::rtl/soc_nim_asic.v",
+        "dir::rtl/axi_rom.v",
+        "dir::rtl/rom_loader.v",
+        "dir::../rtl/soc_demo.v",
+        "dir::../rtl/axi4_lite_interconnect_m1s4.v",
+        "dir::../rtl/axi_ram.v",
+        "dir::../rtl/gpio/axi4_lite_gpio_wrapper.v",
+        "dir::../rtl/gpio/axi4_lite_slave.v",
+        "dir::../rtl/gpio/gpio.v",
+        "dir::../rtl/spi/spi_core.v",
+        "dir::../rtl/spi/axi4_lite_spi.v",
+        "dir::../rtl/uart/uart_rx.v",
+        "dir::../rtl/uart/uart_tx.v",
+        "dir::../rtl/uart/axi4_lite_uart.v",
+        "dir::../rtl/uart/axi4_lite_split2.v",
+        "dir::../rtl/picorv32/picorv32.v",
+        "dir::../rtl/picorv32/picorv32_axi.v",
+        "dir::../rtl/picorv32/picorv32_axi_adapter.v",
+        "dir::../rtl/picorv32/picorv32_pcpi_mul.v",
+        "dir::../rtl/picorv32/picorv32_pcpi_fastmul.v",
+        "dir::../rtl/picorv32/picorv32_pcpi_div.v"
+    ],
+    "CLOCK_PORT": "clk",
+    "CLOCK_PERIOD": 40,
+    "FP_SIZING": "relative",
+    "FP_CORE_UTIL": 40,
+    "PL_TARGET_DENSITY_PCT": 50,
+    "CTS_APPLY_NDR": "none",
+    "IO_PIN_ORDER_CFG": "dir::pin_order.cfg"
+}
